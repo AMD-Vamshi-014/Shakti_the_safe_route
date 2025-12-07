@@ -1,0 +1,9 @@
+{
+  "name": "SafeRoute",
+  "description": "A comprehensive women's safety navigation application prioritizing safety through community signals and real-time context.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
