@@ -83,61 +83,92 @@ export const MOCK_SAFE_PLACES: SafePlace[] = [
   }
 ];
 
-// Helper to generate a smooth path between points
-const generateSmoothPath = (start: Coordinates, end: Coordinates, numPoints: number = 50): Coordinates[] => {
-  const path: Coordinates[] = [];
-  // Midpoint with some curve
-  const midLat = (start.lat + end.lat) / 2 + (Math.random() - 0.5) * 0.005;
-  const midLng = (start.lng + end.lng) / 2 + (Math.random() - 0.5) * 0.005;
+// Helper: Calculate Haversine Distance in KM
+const calculateDistance = (start: Coordinates, end: Coordinates): number => {
+  const R = 6371; // Radius of earth in km
+  const dLat = (end.lat - start.lat) * (Math.PI / 180);
+  const dLon = (end.lng - start.lng) * (Math.PI / 180);
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(start.lat * (Math.PI/180)) * Math.cos(end.lat * (Math.PI/180)) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+};
 
-  // First leg
-  for (let i = 0; i <= numPoints / 2; i++) {
-    const t = i / (numPoints / 2);
-    path.push({
-      lat: start.lat + (midLat - start.lat) * t,
-      lng: start.lng + (midLng - start.lng) * t
-    });
-  }
-  // Second leg
-  for (let i = 0; i <= numPoints / 2; i++) {
-    const t = i / (numPoints / 2);
-    path.push({
-      lat: midLat + (end.lat - midLat) * t,
-      lng: midLng + (end.lng - midLng) * t
-    });
+// Helper: Generate a smooth Bezier curved path
+const generateSmoothPath = (start: Coordinates, end: Coordinates, numPoints: number = 200): Coordinates[] => {
+  const path: Coordinates[] = [];
+  
+  // Midpoint
+  const midLat = (start.lat + end.lat) / 2;
+  const midLng = (start.lng + end.lng) / 2;
+  
+  // Add a control point offset for the curve (Quadratic Bezier)
+  // Offset depends on direction to ensure it doesn't just look like a straight line
+  const dist = Math.sqrt(Math.pow(end.lat - start.lat, 2) + Math.pow(end.lng - start.lng, 2));
+  
+  // Create a perpendicular-ish offset
+  const offset = dist * 0.2; // 20% curve
+  const controlLat = midLat + offset * (Math.random() > 0.5 ? 1 : -1);
+  const controlLng = midLng + offset * (Math.random() > 0.5 ? 1 : -1);
+
+  for (let i = 0; i <= numPoints; i++) {
+    const t = i / numPoints;
+    // Quadratic Bezier formula: B(t) = (1-t)^2 * P0 + 2(1-t)t * P1 + t^2 * P2
+    const lat = Math.pow(1-t, 2) * start.lat + 2 * (1-t) * t * controlLat + Math.pow(t, 2) * end.lat;
+    const lng = Math.pow(1-t, 2) * start.lng + 2 * (1-t) * t * controlLng + Math.pow(t, 2) * end.lng;
+    
+    path.push({ lat, lng });
   }
   return path;
 };
 
-// Generate Mock Routes based on a start/end (Visual simulation only)
+// Generate Mock Routes based on REAL coordinates
 export const getMockRoutes = (start: Coordinates, end: Coordinates): RouteOption[] => {
-  return [
+  // Calculate real distance
+  const realDistanceKm = calculateDistance(start, end);
+  
+  // Add road factor (roads are rarely straight lines) - approx 1.3x multiplier
+  const routeBaseDistance = Math.max(0.5, realDistanceKm * 1.3);
+
+  // Define route variations
+  const routes = [
     {
-      id: 'r1',
       type: 'fastest',
-      distance: "4.2 km",
-      duration: "12 min",
-      safetyScore: 6.5,
-      roadQuality: 'Good',
-      path: generateSmoothPath(start, end, 60)
+      distMult: 1.0, // Base
+      speed: 35, // km/h
+      score: 6.5,
+      quality: 'Good' as const
     },
     {
-      id: 'r2',
       type: 'safest',
-      distance: "5.1 km",
-      duration: "18 min",
-      safetyScore: 9.2,
-      roadQuality: 'Good',
-      path: generateSmoothPath(start, end, 80) // Longer path
+      distMult: 1.15, // Slightly longer
+      speed: 30, // Slower due to safer roads
+      score: 9.2,
+      quality: 'Good' as const
     },
     {
-      id: 'r3',
       type: 'smoothest',
-      distance: "4.8 km",
-      duration: "15 min",
-      safetyScore: 7.8,
-      roadQuality: 'Average',
-      path: generateSmoothPath(start, end, 70)
+      distMult: 1.1,
+      speed: 32,
+      score: 7.8,
+      quality: 'Average' as const
     }
   ];
+
+  return routes.map((r, index) => {
+    const dist = routeBaseDistance * r.distMult;
+    const timeMins = (dist / r.speed) * 60;
+    
+    return {
+      id: `r${index + 1}`,
+      type: r.type as any,
+      distance: `${dist.toFixed(1)} km`,
+      duration: `${Math.ceil(timeMins)} min`,
+      safetyScore: r.score,
+      roadQuality: r.quality,
+      path: generateSmoothPath(start, end, 200) // Re-generate for slight variation if we added randomness
+    };
+  });
 };

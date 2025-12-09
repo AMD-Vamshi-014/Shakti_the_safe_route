@@ -36,7 +36,12 @@ const LeafletMap: React.FC<LeafletMapProps> = ({ center, destination, selectedRo
       }).addTo(mapRef.current);
     } else {
       // Update view if center changes (important for navigation tracking)
-      mapRef.current.setView([center.lat, center.lng], zoom, { animate: true, duration: 1 });
+      // Disable animation in navigation mode (high zoom) for responsive slider tracking
+      const isNavMode = zoom > 16;
+      mapRef.current.setView([center.lat, center.lng], zoom, { 
+          animate: !isNavMode, 
+          duration: 0.1 
+      });
     }
     
     // Cleanup existing markers/layers
